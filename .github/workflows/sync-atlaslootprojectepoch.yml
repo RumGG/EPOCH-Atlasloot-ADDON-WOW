@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN should suffice for read/write
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       # 2. Configure Git
       - name: Configure Git
@@ -30,37 +30,30 @@ jobs:
           git remote add upstream https://github.com/Raynbock/AtlaslootProjectEpoch.git || true
           git fetch upstream --quiet || { echo "Failed to fetch upstream"; exit 1; }
 
-          # Detect upstream default branch (main or master)
+          # Detect upstream default branch
           UPSTREAM_DEFAULT=$(git remote show upstream | grep 'HEAD branch' | awk '{print $NF}')
           echo "Upstream default branch is $UPSTREAM_DEFAULT"
           echo "UPSTREAM_DEFAULT=$UPSTREAM_DEFAULT" >> $GITHUB_ENV
 
-      # 4. Sync main with upstream default branch, excluding .github directory
+      # 4. Sync main with upstream default branch, excluding .github
       - name: Sync main with upstream default branch
         id: sync
         run: |
           git checkout main || { echo "Failed to checkout main"; exit 1; }
 
-          # Create a temporary branch to apply upstream changes
-          git checkout -b temp-sync || { echo "Failed to create temp branch"; exit 1; }
-          git reset --hard upstream/${UPSTREAM_DEFAULT} || { echo "Failed to reset to upstream/${UPSTREAM_DEFAULT}"; exit 1; }
-
-          # Remove .github directory from upstream
-          rm -rf .github || true
-
-          # Restore .github from origin/main
-          git checkout origin/main -- .github || true
+          # Reset index to upstream default branch but do not change working files
+          git fetch upstream ${UPSTREAM_DEFAULT} || { echo "Failed to fetch upstream branch"; exit 1; }
+          git restore --source=upstream/${UPSTREAM_DEFAULT} --staged . || true
+          git restore --source=upstream/${UPSTREAM_DEFAULT} -- . ':!/.github' || true
 
           # Stage all changes
           git add . || true
 
-          # Check for meaningful changes (excluding .github)
+          # Commit if there are meaningful changes (excluding .github)
           if git diff --cached -- . ':!.github' | grep -q .; then
             git commit -m "Sync with upstream, excluding .github directory" || { echo "Failed to commit changes"; exit 1; }
-            git checkout main || { echo "Failed to checkout main"; exit 1; }
-            git merge temp-sync --no-edit || { echo "Failed to merge temp branch"; exit 1; }
 
-            # Push changes if they exist
+            # Push changes if needed
             if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
               TAG="v$(date +'%Y.%m.%d-%H%M')"
               if git tag "$TAG" 2>/dev/null; then
@@ -79,9 +72,6 @@ jobs:
             echo "No meaningful changes to sync (excluding .github)"
             echo "SYNCED=false" >> $GITHUB_ENV
           fi
-
-          # Clean up temporary branch
-          git branch -D temp-sync || true
 
       # 5. Send Discord notification if synced
       - name: Send Discord Notification
