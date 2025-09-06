@@ -23,21 +23,27 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # 3. Add upstream remote
-      - name: Add upstream
+      # 3. Add upstream remote and detect default branch
+      - name: Add upstream and detect default branch
+        id: upstream
         run: |
           git remote add upstream https://github.com/Raynbock/AtlaslootProjectEpoch.git || true
-          git fetch upstream master --quiet || { echo "Failed to fetch upstream"; exit 1; }
+          git fetch upstream --quiet || { echo "Failed to fetch upstream"; exit 1; }
 
-      # 4. Sync main with upstream master, excluding .github directory
-      - name: Sync main with upstream master
+          # Detect upstream default branch (main or master)
+          UPSTREAM_DEFAULT=$(git remote show upstream | grep 'HEAD branch' | awk '{print $NF}')
+          echo "Upstream default branch is $UPSTREAM_DEFAULT"
+          echo "UPSTREAM_DEFAULT=$UPSTREAM_DEFAULT" >> $GITHUB_ENV
+
+      # 4. Sync main with upstream default branch, excluding .github directory
+      - name: Sync main with upstream default branch
         id: sync
         run: |
           git checkout main || { echo "Failed to checkout main"; exit 1; }
 
           # Create a temporary branch to apply upstream changes
           git checkout -b temp-sync || { echo "Failed to create temp branch"; exit 1; }
-          git reset --hard upstream/master || { echo "Failed to reset to upstream/master"; exit 1; }
+          git reset --hard upstream/${UPSTREAM_DEFAULT} || { echo "Failed to reset to upstream/${UPSTREAM_DEFAULT}"; exit 1; }
 
           # Remove .github directory from upstream
           rm -rf .github || true
@@ -89,5 +95,5 @@ jobs:
           fi
           curl -H "Content-Type: application/json" \
                -X POST \
-               -d "{\"username\":\"Addon Sync Bot\",\"embeds\":[{\"title\":\"AtlaslootProjectEpoch Updates Detected\",\"description\":\"Private repo main branch synced to [Raynbock/AtlaslootProjectEpoch](https://github.com/Raynbock/AtlaslootProjectEpoch) master branch.\",\"color\":3066993,\"fields\":[{\"name\":\"New Tag\",\"value\":\"${{ env.TAG }}\"}]}]}" \
+               -d "{\"username\":\"Addon Sync Bot\",\"embeds\":[{\"title\":\"AtlaslootProjectEpoch Updates Detected\",\"description\":\"Private repo main branch synced to [Raynbock/AtlaslootProjectEpoch](https://github.com/Raynbock/AtlaslootProjectEpoch) default branch.\",\"color\":3066993,\"fields\":[{\"name\":\"New Tag\",\"value\":\"${{ env.TAG }}\"}]}]}" \
                "$DISCORD_WEBHOOK" || { echo "Failed to send Discord notification"; exit 1; }
