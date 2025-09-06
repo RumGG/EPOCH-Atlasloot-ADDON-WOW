@@ -1,0 +1,93 @@
+name: Sync AtlaslootProjectEpoch Updates
+
+on:
+  schedule:
+    - cron: '0 */3 * * *' # Every 3 hours
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout your private repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN should suffice for read/write
+
+      # 2. Configure Git
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # 3. Add upstream remote
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/Raynbock/AtlaslootProjectEpoch.git || true
+          git fetch upstream master --quiet || { echo "Failed to fetch upstream"; exit 1; }
+
+      # 4. Sync main with upstream master, excluding .github directory
+      - name: Sync main with upstream master
+        id: sync
+        run: |
+          git checkout main || { echo "Failed to checkout main"; exit 1; }
+
+          # Create a temporary branch to apply upstream changes
+          git checkout -b temp-sync || { echo "Failed to create temp branch"; exit 1; }
+          git reset --hard upstream/master || { echo "Failed to reset to upstream/master"; exit 1; }
+
+          # Remove .github directory from upstream
+          rm -rf .github || true
+
+          # Restore .github from origin/main
+          git checkout origin/main -- .github || true
+
+          # Stage all changes
+          git add . || true
+
+          # Check for meaningful changes (excluding .github)
+          if git diff --cached -- . ':!.github' | grep -q .; then
+            git commit -m "Sync with upstream, excluding .github directory" || { echo "Failed to commit changes"; exit 1; }
+            git checkout main || { echo "Failed to checkout main"; exit 1; }
+            git merge temp-sync --no-edit || { echo "Failed to merge temp branch"; exit 1; }
+
+            # Push changes if they exist
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+              TAG="v$(date +'%Y.%m.%d-%H%M')"
+              if git tag "$TAG" 2>/dev/null; then
+                git push origin main --force --tags || { echo "Failed to push changes"; exit 1; }
+                echo "SYNCED=true" >> $GITHUB_ENV
+                echo "TAG=$TAG" >> $GITHUB_ENV
+              else
+                echo "Tag $TAG already exists, skipping push"
+                echo "SYNCED=false" >> $GITHUB_ENV
+              fi
+            else
+              echo "No changes to sync"
+              echo "SYNCED=false" >> $GITHUB_ENV
+            fi
+          else
+            echo "No meaningful changes to sync (excluding .github)"
+            echo "SYNCED=false" >> $GITHUB_ENV
+          fi
+
+          # Clean up temporary branch
+          git branch -D temp-sync || true
+
+      # 5. Send Discord notification if synced
+      - name: Send Discord Notification
+        if: env.SYNCED == 'true'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "Discord webhook URL is not set"
+            exit 1
+          fi
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -d "{\"username\":\"Addon Sync Bot\",\"embeds\":[{\"title\":\"AtlaslootProjectEpoch Updates Detected\",\"description\":\"Private repo main branch synced to [Raynbock/AtlaslootProjectEpoch](https://github.com/Raynbock/AtlaslootProjectEpoch) master branch.\",\"color\":3066993,\"fields\":[{\"name\":\"New Tag\",\"value\":\"${{ env.TAG }}\"}]}]}" \
+               "$DISCORD_WEBHOOK" || { echo "Failed to send Discord notification"; exit 1; }
