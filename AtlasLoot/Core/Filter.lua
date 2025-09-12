@@ -111,6 +111,7 @@ function AtlasLoot_HideNoUsableItems()
 	local pFrame = AtlasLootItemsFrame.refreshOri[4] 	
 	local tablebase = AtlasLoot_Data[dataID]
 	if not tablebase or dataID == "WishList" or dataID == "SearchResult" or dataSource == "AtlasLootCrafting" then return end
+	table.sort(tablebase, function(a, b) return a[1] < b[1]	end) -- Sort the loot table to ensure ascending slot order
 	local itemCount = 0
 	local countAll = 1
 	local count = 0
@@ -223,6 +224,19 @@ function AtlasLoot_HideNoUsableItems()
 	AtlasLoot_ShowItemsFrame("FilterList", "AtlasLootFilter", "", AtlasLootItemsFrame.refresh[4])
 end
 
+function AtlasLoot_SetupFilterButton()
+	local filterCheckBox = getglobal("AtlasLootFilterCheck")
+	filterCheckBox:RegisterForClicks("LeftButtonUp", "RightButtonUp");
+	filterCheckBox:SetScript("OnClick", function(self, button)
+		if (button == "RightButton") then
+            self:SetChecked(ATLASLOOT_FILTER_ENABLE and true or false) -- Don't check/uncheck the box on right click
+			InterfaceOptionsFrame_OpenToCategory(FilterOptionsFrame)
+		elseif (button == "LeftButton") then
+			AtlasLoot_FilterEnableButton()
+		end	
+	end)
+end
+
 function AtlasLoot_FilterEnableButton()
 	if ATLASLOOT_FILTER_ENABLE == true then
 		ATLASLOOT_FILTER_ENABLE = false
@@ -302,7 +316,7 @@ end
 
 function AtlasLoot_CreateFilterOptions()
 	if OptionsLoadet then return end
-	local FilterOptionsFrame = CreateFrame("FRAME", nil)
+	local FilterOptionsFrame = CreateFrame("FRAME", "FilterOptionsFrame")
 		FilterOptionsFrame.name = AL["Filter"];
 		FilterOptionsFrame.parent = AL["AtlasLoot"];
 		

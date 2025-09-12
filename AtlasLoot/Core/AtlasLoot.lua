@@ -37,7 +37,7 @@ local AL = LibStub("AceLocale-3.0"):GetLocale("AtlasLoot");
 --Establish version number and compatible version of Atlas
 local EPOCH_VERSION_MAJOR = "1";
 local EPOCH_VERSION_MINOR = "00";
-local EPOCH_VERSION_BOSSES = "3";
+local EPOCH_VERSION_BOSSES = "4";
 
 local VERSION_MAJOR = "5";
 local VERSION_MINOR = "11";
@@ -386,6 +386,8 @@ function AtlasLoot_OnVariablesLoaded()
 	AtlasLoot.db.profile.Bigraid = false
 	AtlasLoot.db.profile.BigraidHeroic = false
 	AtlasLoot.db.profile.HeroicMode = false
+
+	AtlasLoot_SetupFilterButton()
 end
 
 function AtlasLoot_Reset(data)
